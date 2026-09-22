@@ -32,10 +32,9 @@ jobs:
       - name: Preparar os arquivos públicos
         shell: bash
         run: |
-          mkdir -p _site/fonts
+          mkdir -p _site
           cp index.html styles.css font-data.js _site/
           cp placa.obj placa.mtl padrao.png placa.png _site/
-          cp -R fonts/. _site/fonts/
           touch _site/.nojekyll
 
       - name: Enviar os arquivos do site
