@@ -15,14 +15,15 @@ correspondente na base placa.obj.
 
 BASE PLACA.OBJ
 O arquivo placa.obj da pasta raiz é obrigatório e é a única base utilizada.
-As texturas padrao.png e placa.png também são lidas da pasta raiz. Depois de
-exportar uma nova versão no Blender, clique em "Recarregar placa.obj da pasta".
-O gerador lê novamente o arquivo que está na raiz, sem usar uma cópia embutida.
+As opções de padrão usam padrao.png para preto, padrao-azul.png para azul e
+padrao-vermelho.png para vermelho. A textura placa.png também fica na raiz.
+O botão para recarregar placa.obj aparece somente ao abrir localmente ou em
+localhost, pois é um recurso de depuração.
 
 PUBLICAÇÃO NO GITHUB PAGES
-Mantenha index.html, styles.css, font-data.js, placa.obj, padrao.png e placa.png
-na raiz do site. Mantenha também a pasta fonts. No GitHub Pages, esses arquivos
-são carregados automaticamente e não é necessário selecionar uma pasta.
+Mantenha index.html, styles.css, font-data.js, placa.obj, placa.png e as três
+variações padrao*.png na raiz do site. No GitHub Pages, esses arquivos são
+carregados automaticamente e não é necessário selecionar uma pasta.
 Os nomes dos arquivos devem permanecer exatamente em letras minúsculas.
 
 Modele no plano XY, com a frente voltada para +Z. O gerador centraliza a malha,

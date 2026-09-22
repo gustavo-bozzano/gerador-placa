@@ -37,6 +37,8 @@ const viewport = $('#viewport');
 const placeholder = $('#viewport-placeholder');
 const assetStatus = $('#asset-status');
 const reloadBaseButton = $('#reload-base');
+const colorInput = $('#plate-color');
+const localDebug = location.protocol === 'file:' || ['localhost', '127.0.0.1'].includes(location.hostname);
 
 const canvas = document.createElement('canvas');
 canvas.width = 1600;
@@ -313,7 +315,8 @@ function normalizeBase(parts) {
 
 function updateAssetStatus(message = '') {
   const loaded = Boolean(customAssets.base);
-  assetStatus.textContent = message || (loaded ? 'placa.obj da pasta raiz em uso.' : 'O arquivo placa.obj da pasta raiz não foi carregado.');
+  const colorName = colorInput?.selectedOptions[0]?.textContent?.toLowerCase() || 'preto';
+  assetStatus.textContent = message || (loaded ? `placa.obj da pasta raiz em uso. Padrão ${colorName}.` : 'O arquivo placa.obj da pasta raiz não foi carregado.');
   reloadBaseButton.textContent = loaded ? 'Recarregar placa.obj da pasta' : 'Selecionar pasta do projeto';
 }
 
@@ -392,10 +395,15 @@ async function selectProjectDirectory(requestAccess) {
 }
 
 async function rootFiles(requestAccess = false) {
+  const patternFilename = {
+    preto: 'padrao.png',
+    azul: 'padrao-azul.png',
+    vermelho: 'padrao-vermelho.png'
+  }[colorInput.value] || 'padrao.png';
   if (location.protocol !== 'file:') {
     const [objResponse, patternResponse, plateResponse] = await Promise.all([
       fetchFresh('./placa.obj'),
-      fetchFresh('./padrao.png'),
+      fetchFresh(`./${patternFilename}`),
       fetchFresh('./placa.png')
     ]);
     return { objText: await objResponse.text(), patternBlob: await patternResponse.blob(), plateBlob: await plateResponse.blob() };
@@ -403,7 +411,7 @@ async function rootFiles(requestAccess = false) {
   const directory = await selectProjectDirectory(requestAccess);
   const [objHandle, patternHandle, plateHandle] = await Promise.all([
     directory.getFileHandle('placa.obj'),
-    directory.getFileHandle('padrao.png'),
+    directory.getFileHandle(patternFilename),
     directory.getFileHandle('placa.png')
   ]);
   const [objFile, patternBlob, plateBlob] = await Promise.all([
@@ -427,7 +435,7 @@ async function loadRootBase(requestAccess = false) {
 
   const textureLoader = new THREE.TextureLoader();
   const materialMap = {
-    'Material.001': { exportName: 'placa_padrao', filename: 'placa_padrao.png', dataUrl: patternUrl },
+    'Material.001': { exportName: 'placa_padrao', filename: `placa_padrao_${colorInput.value}.png`, dataUrl: patternUrl },
     'Material.002': { exportName: 'placa_textura', filename: 'placa_textura.png', dataUrl: plateUrl }
   };
   for (const material of modelBaseMaterials.values()) material.dispose();
@@ -469,6 +477,7 @@ function validate() {
 
 function initializeInterface() {
   codeHint.textContent = 'Texto livre, sem formato obrigatório.';
+  document.querySelectorAll('[data-local-debug]').forEach((element) => { element.hidden = !localDebug; });
   validate();
 }
 
@@ -559,7 +568,7 @@ function download(blob, filename) {
 
 function baseName() {
   const label = codeInput.value.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'sem-texto';
-  return `placa_${label}`;
+  return `placa_${label}_${colorInput.value}`;
 }
 
 function base64Blob(base64, type = 'image/png') {
@@ -608,6 +617,18 @@ reloadBaseButton.addEventListener('click', async () => {
 form.addEventListener('change', validate);
 form.addEventListener('submit', (event) => event.preventDefault());
 codeInput.addEventListener('input', validate);
+colorInput.addEventListener('change', async () => {
+  colorInput.disabled = true;
+  try {
+    await loadRootBase(location.protocol === 'file:');
+    placeholder.hidden = true;
+    validate();
+  } catch (error) {
+    if (error.name !== 'AbortError') updateAssetStatus(error.message);
+  } finally {
+    colorInput.disabled = false;
+  }
+});
 $('#reset-view').addEventListener('click', resetView);
 objButton.addEventListener('click', () => runExport(() => {
   if (!validate()) return;
@@ -671,8 +692,15 @@ try {
               <div class="font-fixed"><span>Fonte</span><strong>GL Nummernschild estreita</strong></div>
               <p class="field-hint">O texto digitado vira uma geometria 3D com relevo e recebe o mesmo padrão repetido da base.</p>
 
-              <button class="file-button" type="button" id="reload-base">Selecionar pasta do projeto</button>
-              <p class="asset-help">Abra o index.html diretamente. Na primeira vez, selecione a pasta <code>gerador-placa</code>. Depois de exportar no Blender, clique acima para reler o placa.obj da mesma pasta.</p>
+              <label class="input-label" for="plate-color">Cor do padrão</label>
+              <select id="plate-color" name="plate-color">
+                <option value="preto" selected>Preto</option>
+                <option value="azul">Azul</option>
+                <option value="vermelho">Vermelho</option>
+              </select>
+
+              <button class="file-button local-debug" data-local-debug type="button" id="reload-base" hidden>Selecionar pasta do projeto</button>
+              <p class="asset-help local-debug" data-local-debug hidden>Recurso de depuração local. Selecione a pasta <code>gerador-placa</code> e use o botão para reler o placa.obj após exportá-lo no Blender.</p>
               <p id="asset-status" class="asset-status" aria-live="polite"></p>
             </fieldset>
 

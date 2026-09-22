@@ -20,10 +20,12 @@ O endereço publicado aparecerá na execução e na página de configurações d
 - `placa.obj`
 - `placa.mtl`
 - `padrao.png`
+- `padrao-azul.png`
+- `padrao-vermelho.png`
 - `placa.png`
 
 O fluxo de publicação copia somente esses arquivos. Arquivos do Blender, PSDs e materiais de trabalho podem permanecer no repositório sem fazer parte do site publicado.
 
-Ao atualizar `placa.obj`, `padrao.png` ou `placa.png` e enviar a alteração ao GitHub, o site é publicado novamente automaticamente.
+Ao atualizar `placa.obj`, qualquer variação `padrao*.png` ou `placa.png` e enviar a alteração ao GitHub, o site é publicado novamente automaticamente.
 
 Se `actions/configure-pages` informar `Get Pages site failed` ou `Not Found`, o Pages ainda não foi habilitado em **Settings > Pages**.
