@@ -1,0 +1,702 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#10131b" />
+    <title>PlacaLab 3D | Gerador de placas para mods</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+        }
+      }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/opentype.js@1.3.4/dist/opentype.min.js"></script>
+    <script src="./font-data.js"></script>
+    <script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+
+const WIDTH = 0.4;
+const HEIGHT = 0.13;
+const THICKNESS = 0.0012;
+const $ = (selector) => document.querySelector(selector);
+
+const form = $('#plate-form');
+const codeInput = $('#plate-code');
+const codeHint = $('#code-hint');
+const packButton = $('#download-pack');
+const objButton = $('#download-obj');
+const viewport = $('#viewport');
+const placeholder = $('#viewport-placeholder');
+const assetStatus = $('#asset-status');
+const reloadBaseButton = $('#reload-base');
+
+const canvas = document.createElement('canvas');
+canvas.width = 1600;
+canvas.height = 520;
+const ctx = canvas.getContext('2d');
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(35, 1, 0.001, 10);
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.7;
+viewport.append(renderer.domElement);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minDistance = 0.2;
+controls.maxDistance = 1.7;
+controls.enablePan = false;
+controls.target.set(0, 0, 0);
+scene.add(new THREE.AmbientLight(0xffffff, 2.0));
+const keyLight = new THREE.DirectionalLight(0xffffff, 2.2);
+keyLight.position.set(-0.2, 0.35, 0.8);
+scene.add(keyLight);
+const fillLight = new THREE.DirectionalLight(0x90b8ff, 0.9);
+fillLight.position.set(0.4, -0.2, 0.3);
+scene.add(fillLight);
+
+const plateGroup = new THREE.Group();
+scene.add(plateGroup);
+const surfaceTexture = new THREE.CanvasTexture(canvas);
+surfaceTexture.colorSpace = THREE.SRGBColorSpace;
+surfaceTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+const materials = {
+  metal: new THREE.MeshStandardMaterial({ color: 0xc8ccd0, metalness: 0.55, roughness: 0.38 }),
+  surface: new THREE.MeshBasicMaterial({ map: surfaceTexture, toneMapped: false }),
+  rim: new THREE.MeshStandardMaterial({ color: 0xcdd1d2, metalness: 0.5, roughness: 0.42 }),
+  ink: new THREE.MeshStandardMaterial({ color: 0x111820, metalness: 0.06, roughness: 0.78 }),
+  screw: new THREE.MeshStandardMaterial({ color: 0x6d747b, metalness: 0.65, roughness: 0.35 })
+};
+
+let font;
+let valid = false;
+const objLoader = new OBJLoader();
+const customAssets = { base: null };
+const plateFonts = {};
+const modelTextureFiles = new Map();
+const modelBaseMaterials = new Map();
+
+function roundedRect(width, height, radius) {
+  const x = -width / 2;
+  const y = -height / 2;
+  const s = new THREE.Shape();
+  s.moveTo(x + radius, y);
+  s.lineTo(x + width - radius, y);
+  s.quadraticCurveTo(x + width, y, x + width, y + radius);
+  s.lineTo(x + width, y + height - radius);
+  s.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  s.lineTo(x + radius, y + height);
+  s.quadraticCurveTo(x, y + height, x, y + height - radius);
+  s.lineTo(x, y + radius);
+  s.quadraticCurveTo(x, y, x + radius, y);
+  return s;
+}
+
+function addHole(shape, x, y, radius) {
+  const hole = new THREE.Path();
+  hole.absarc(x, y, radius, 0, Math.PI * 2, true);
+  shape.holes.push(hole);
+}
+
+function tag(mesh, materialName) {
+  mesh.userData.exportMaterial = materialName;
+  plateGroup.add(mesh);
+  return mesh;
+}
+
+function clearModel() {
+  for (const child of [...plateGroup.children]) {
+    plateGroup.remove(child);
+    child.geometry?.dispose();
+  }
+}
+
+function paintMercosul() {
+  ctx.fillStyle = '#f5f6f2';
+  ctx.fillRect(0, 0, 1600, 520);
+  ctx.fillStyle = '#0754a4';
+  ctx.fillRect(0, 0, 1600, 118);
+  ctx.fillStyle = 'rgba(255,255,255,.95)';
+  ctx.font = 'bold 43px Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('BRASIL', 800, 81);
+  ctx.font = 'bold 24px Arial, sans-serif';
+  ctx.fillText('MERCOSUL', 155, 78);
+
+  // Bandeira simplificada, desenhada localmente para acompanhar a textura exportada.
+  ctx.fillStyle = '#148744';
+  ctx.fillRect(1330, 24, 114, 69);
+  ctx.fillStyle = '#f6d733';
+  ctx.beginPath();
+  ctx.moveTo(1387, 31); ctx.lineTo(1437, 58); ctx.lineTo(1387, 86); ctx.lineTo(1338, 58);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#1550a0';
+  ctx.beginPath(); ctx.arc(1387, 58, 20, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = '#46515c';
+  ctx.font = 'bold 17px Arial, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('BR', 53, 469);
+  // Padrão visual ilustrativo. Não codifica dados e não funciona como QR Code.
+  const cell = 7;
+  const left = 61;
+  const top = 250;
+  for (let row = 0; row < 14; row++) {
+    for (let col = 0; col < 14; col++) {
+      if (((row * 11 + col * 7 + row * col) % 5) < 2) {
+        ctx.fillStyle = '#555f69';
+        ctx.fillRect(left + col * cell, top + row * cell, cell - 1, cell - 1);
+      }
+    }
+  }
+  ctx.fillStyle = '#68727b';
+  ctx.font = '14px Arial, sans-serif';
+  ctx.fillText('ILUSTRATIVO', 52, 367);
+}
+
+function paintTexture() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  paintMercosul();
+  surfaceTexture.needsUpdate = true;
+}
+
+function decodeBase64Font(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return window.opentype.parse(bytes.buffer);
+}
+
+function makeThreeFont(openTypeFont) {
+  return {
+    generateShapes(text, size) {
+      const path = openTypeFont.getPath(text, 0, 0, size);
+      const target = new THREE.ShapePath();
+      for (const command of path.commands) {
+        const x = command.x || 0;
+        const y = -(command.y || 0);
+        if (command.type === 'M') target.moveTo(x, y);
+        else if (command.type === 'L') target.lineTo(x, y);
+        else if (command.type === 'C') target.bezierCurveTo(command.x1, -command.y1, command.x2, -command.y2, x, y);
+        else if (command.type === 'Q') target.quadraticCurveTo(command.x1, -command.y1, x, y);
+        else if (command.type === 'Z') target.currentPath?.closePath();
+      }
+      return target.toShapes();
+    }
+  };
+}
+
+function selectPlateFont() {
+  font = makeThreeFont(plateFonts.eng);
+}
+
+function patternUvProjection(parts) {
+  const patternParts = parts.filter((part) => part.sourceMaterial === 'Material.001' && part.geometry.getAttribute('uv'));
+  if (!patternParts.length) return { minU: 0, minV: 0, scaleU: 8.385, scaleV: 14.605 };
+  const positionBox = geometryBounds(patternParts);
+  let minU = Infinity;
+  let minV = Infinity;
+  let maxU = -Infinity;
+  let maxV = -Infinity;
+  for (const part of patternParts) {
+    const uv = part.geometry.getAttribute('uv');
+    for (let i = 0; i < uv.count; i++) {
+      minU = Math.min(minU, uv.getX(i));
+      minV = Math.min(minV, uv.getY(i));
+      maxU = Math.max(maxU, uv.getX(i));
+      maxV = Math.max(maxV, uv.getY(i));
+    }
+  }
+  const width = Math.max(positionBox.max.x - positionBox.min.x, WIDTH);
+  const height = Math.max(positionBox.max.y - positionBox.min.y, HEIGHT);
+  return { minU, minV, scaleU: (maxU - minU) / width, scaleV: (maxV - minV) / height };
+}
+
+function applyPatternUV(geometry, scale, offsetX, offsetY) {
+  const position = geometry.getAttribute('position');
+  const uv = new Float32Array(position.count * 2);
+  const projection = customAssets.base?.patternUV || { minU: 0, minV: 0, scaleU: 8.385, scaleV: 14.605 };
+  for (let i = 0; i < position.count; i++) {
+    const plateX = position.getX(i) * scale + offsetX;
+    const plateY = position.getY(i) * scale + offsetY;
+    uv[i * 2] = projection.minU + (plateX + WIDTH / 2) * projection.scaleU;
+    uv[i * 2 + 1] = projection.minV + (plateY + HEIGHT / 2) * projection.scaleV;
+  }
+  geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+}
+
+function createText(code, frontZ = THICKNESS) {
+  const geometry = new TextGeometry(code, {
+    font,
+    size: 0.08,
+    depth: 0.0015,
+    curveSegments: 5,
+    bevelEnabled: true,
+    bevelThickness: 0.00018,
+    bevelSize: 0.00018,
+    bevelSegments: 1
+  });
+  geometry.computeBoundingBox();
+  const box = geometry.boundingBox;
+  const scale = Math.min(0.326 / (box.max.x - box.min.x), 0.071 / (box.max.y - box.min.y));
+  geometry.translate(-(box.min.x + box.max.x) / 2, -(box.min.y + box.max.y) / 2, 0);
+  const offsetX = 0.014;
+  const offsetY = -0.018;
+  applyPatternUV(geometry, scale, offsetX, offsetY);
+  const patternMaterial = modelBaseMaterials.get('Material.001') || materials.ink;
+  const text = tag(new THREE.Mesh(geometry, patternMaterial), 'placa_padrao');
+  text.scale.set(scale, scale, 1);
+  text.position.set(offsetX, offsetY, frontZ + 0.00011);
+}
+
+function geometryBounds(parts) {
+  const box = new THREE.Box3();
+  for (const part of parts) {
+    part.geometry.computeBoundingBox();
+    box.union(part.geometry.boundingBox);
+  }
+  return box;
+}
+
+function extractParts(object) {
+  object.updateMatrixWorld(true);
+  const parts = [];
+  object.traverse((child) => {
+    if (!child.isMesh || !child.geometry?.getAttribute('position')) return;
+    const source = child.geometry.index ? child.geometry.toNonIndexed() : child.geometry.clone();
+    const sourceMaterials = Array.isArray(child.material) ? child.material : [child.material];
+    const groups = source.groups.length ? source.groups : [{ start: 0, count: source.getAttribute('position').count, materialIndex: 0 }];
+    for (const group of groups) {
+      const geometry = new THREE.BufferGeometry();
+      for (const [name, attribute] of Object.entries(source.attributes)) {
+        const start = group.start * attribute.itemSize;
+        const end = (group.start + group.count) * attribute.itemSize;
+        const values = attribute.array.slice(start, end);
+        geometry.setAttribute(name, new THREE.BufferAttribute(values, attribute.itemSize, attribute.normalized));
+      }
+      geometry.applyMatrix4(child.matrixWorld);
+      if (!geometry.getAttribute('normal')) geometry.computeVertexNormals();
+      const sourceMaterial = sourceMaterials[group.materialIndex || 0];
+      parts.push({ geometry, sourceMaterial: sourceMaterial?.name || '' });
+    }
+    source.dispose();
+  });
+  return parts;
+}
+
+function normalizeBase(parts) {
+  const box = geometryBounds(parts);
+  const size = box.getSize(new THREE.Vector3());
+  if (!size.x || !size.y) throw new Error('A base não possui dimensões válidas.');
+  const sx = WIDTH / size.x;
+  const sy = HEIGHT / size.y;
+  const sz = Math.min(sx, sy);
+  const center = box.getCenter(new THREE.Vector3());
+  const translate = new THREE.Matrix4().makeTranslation(-center.x, -center.y, -box.min.z);
+  const scale = new THREE.Matrix4().makeScale(sx, sy, sz);
+  const transform = scale.multiply(translate);
+  for (const part of parts) part.geometry.applyMatrix4(transform);
+  const normalizedBox = geometryBounds(parts);
+  return { parts, frontZ: normalizedBox.max.z, patternUV: patternUvProjection(parts) };
+}
+
+function updateAssetStatus(message = '') {
+  const loaded = Boolean(customAssets.base);
+  assetStatus.textContent = message || (loaded ? 'placa.obj da pasta raiz em uso.' : 'O arquivo placa.obj da pasta raiz não foi carregado.');
+  reloadBaseButton.textContent = loaded ? 'Recarregar placa.obj da pasta' : 'Selecionar pasta do projeto';
+}
+
+function materialForBase(sourceName) {
+  if (modelBaseMaterials.has(sourceName)) return { material: modelBaseMaterials.get(sourceName), name: sourceName === 'Material.001' ? 'placa_padrao' : 'placa_textura' };
+  if (/estampa|front|face|frente/i.test(sourceName)) return { material: materials.surface, name: 'estampa' };
+  if (/aro|rim|borda|border/.test(sourceName)) return { material: materials.rim, name: 'aro' };
+  if (/parafuso|screw/.test(sourceName)) return { material: materials.screw, name: 'parafusos' };
+  return { material: materials.metal, name: 'chapa' };
+}
+
+function addCustomBase(asset) {
+  materials.rim.color.set(0xcbd0d1);
+  for (const part of asset.parts) {
+    const target = materialForBase(part.sourceMaterial);
+    tag(new THREE.Mesh(part.geometry.clone(), target.material), target.name);
+  }
+  return asset.frontZ;
+}
+
+function blobAsDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Não foi possível ler uma das texturas.'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function fetchFresh(path) {
+  const separator = path.includes('?') ? '&' : '?';
+  const response = await fetch(`${path}${separator}atualizacao=${Date.now()}`, { cache: 'no-store' });
+  if (!response.ok) throw new Error(`Não foi possível abrir ${path}.`);
+  return response;
+}
+
+function openHandleDatabase() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open('placalab-arquivos', 1);
+    request.onupgradeneeded = () => request.result.createObjectStore('handles');
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function storedDirectoryHandle() {
+  const database = await openHandleDatabase();
+  return new Promise((resolve, reject) => {
+    const request = database.transaction('handles').objectStore('handles').get('pasta-projeto');
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function storeDirectoryHandle(handle) {
+  const database = await openHandleDatabase();
+  return new Promise((resolve, reject) => {
+    const request = database.transaction('handles', 'readwrite').objectStore('handles').put(handle, 'pasta-projeto');
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function selectProjectDirectory(requestAccess) {
+  let handle = await storedDirectoryHandle();
+  if (handle) {
+    let permission = await handle.queryPermission({ mode: 'read' });
+    if (permission !== 'granted' && requestAccess) permission = await handle.requestPermission({ mode: 'read' });
+    if (permission === 'granted') return handle;
+  }
+  if (!requestAccess) throw new Error('Selecione a pasta gerador-placa para liberar a leitura do placa.obj.');
+  if (!window.showDirectoryPicker) throw new Error('Este navegador não permite selecionar a pasta. Use uma versão atual do Chrome ou Edge.');
+  handle = await window.showDirectoryPicker({ id: 'placalab-projeto', mode: 'read' });
+  await storeDirectoryHandle(handle);
+  return handle;
+}
+
+async function rootFiles(requestAccess = false) {
+  if (location.protocol !== 'file:') {
+    const [objResponse, patternResponse, plateResponse] = await Promise.all([
+      fetchFresh('./placa.obj'),
+      fetchFresh('./padrao.png'),
+      fetchFresh('./placa.png')
+    ]);
+    return { objText: await objResponse.text(), patternBlob: await patternResponse.blob(), plateBlob: await plateResponse.blob() };
+  }
+  const directory = await selectProjectDirectory(requestAccess);
+  const [objHandle, patternHandle, plateHandle] = await Promise.all([
+    directory.getFileHandle('placa.obj'),
+    directory.getFileHandle('padrao.png'),
+    directory.getFileHandle('placa.png')
+  ]);
+  const [objFile, patternBlob, plateBlob] = await Promise.all([
+    objHandle.getFile(),
+    patternHandle.getFile(),
+    plateHandle.getFile()
+  ]);
+  return { objText: await objFile.text(), patternBlob, plateBlob };
+}
+
+async function loadRootBase(requestAccess = false) {
+  updateAssetStatus('Lendo placa.obj da pasta raiz...');
+  const files = await rootFiles(requestAccess);
+  const [patternUrl, plateUrl] = await Promise.all([
+    blobAsDataUrl(files.patternBlob),
+    blobAsDataUrl(files.plateBlob)
+  ]);
+  const object = objLoader.parse(files.objText);
+  const parts = extractParts(object);
+  if (!parts.length) throw new Error('O placa.obj da pasta raiz não contém uma malha válida.');
+
+  const textureLoader = new THREE.TextureLoader();
+  const materialMap = {
+    'Material.001': { exportName: 'placa_padrao', filename: 'placa_padrao.png', dataUrl: patternUrl },
+    'Material.002': { exportName: 'placa_textura', filename: 'placa_textura.png', dataUrl: plateUrl }
+  };
+  for (const material of modelBaseMaterials.values()) material.dispose();
+  modelBaseMaterials.clear();
+  modelTextureFiles.clear();
+  for (const [sourceName, config] of Object.entries(materialMap)) {
+    const texture = textureLoader.load(config.dataUrl);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    const repeats = sourceName === 'Material.001';
+    if (repeats) {
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+    }
+    modelBaseMaterials.set(sourceName, new THREE.MeshStandardMaterial({ map: texture, roughness: 0.72, metalness: 0.04 }));
+    modelTextureFiles.set(config.exportName, { filename: config.filename, base64: config.dataUrl.split(',')[1], repeats });
+  }
+  customAssets.base = normalizeBase(parts);
+  updateAssetStatus();
+}
+
+function createModel(code) {
+  clearModel();
+  paintTexture();
+  if (!customAssets.base) throw new Error('O arquivo placa.obj é obrigatório.');
+  const frontZ = addCustomBase(customAssets.base);
+  if (code.trim()) createText(code, frontZ);
+  updateAssetStatus();
+}
+
+function validate() {
+  const code = codeInput.value;
+  $('.input-suffix').textContent = `${[...code].length} caracteres`;
+  valid = Boolean(font && customAssets.base);
+  packButton.disabled = objButton.disabled = !valid;
+  if (valid) createModel(code);
+  return valid;
+}
+
+function initializeInterface() {
+  codeHint.textContent = 'Texto livre, sem formato obrigatório.';
+  validate();
+}
+
+function resetView() {
+  const aspect = Math.max(0.5, viewport.clientWidth / Math.max(1, viewport.clientHeight));
+  const distance = Math.max(0.53, 0.8 / aspect);
+  camera.position.set(0.075, 0.05, distance);
+  controls.target.set(0, 0, 0);
+  controls.update();
+}
+
+function resize() {
+  const width = viewport.clientWidth;
+  const height = viewport.clientHeight;
+  if (!width || !height) return;
+  renderer.setSize(width, height, false);
+  camera.aspect = width / height;
+  camera.updateProjectionMatrix();
+}
+
+function serializeObj(withMaterials, textureFile, mtlFile) {
+  plateGroup.updateMatrixWorld(true);
+  const lines = ['# PlacaLab 3D', '# Unidade: metros', '# Frente: +Z; largura: X; altura: Y'];
+  if (withMaterials) lines.push(`mtllib ${mtlFile}`);
+  let offset = 0;
+  plateGroup.traverse((object) => {
+    if (!object.isMesh) return;
+    const geometry = object.geometry;
+    const position = geometry.getAttribute('position');
+    const normal = geometry.getAttribute('normal');
+    const uv = geometry.getAttribute('uv');
+    const index = geometry.getIndex();
+    const normalMatrix = new THREE.Matrix3().getNormalMatrix(object.matrixWorld);
+    const p = new THREE.Vector3();
+    const n = new THREE.Vector3();
+    lines.push(`o ${object.userData.exportMaterial}_${offset}`);
+    if (withMaterials) lines.push(`usemtl ${object.userData.exportMaterial}`);
+    for (let i = 0; i < position.count; i++) {
+      p.fromBufferAttribute(position, i).applyMatrix4(object.matrixWorld);
+      lines.push(`v ${p.x.toFixed(7)} ${p.y.toFixed(7)} ${p.z.toFixed(7)}`);
+    }
+    for (let i = 0; i < position.count; i++) lines.push(`vt ${(uv ? uv.getX(i) : 0).toFixed(6)} ${(uv ? uv.getY(i) : 0).toFixed(6)}`);
+    for (let i = 0; i < position.count; i++) {
+      if (normal) n.fromBufferAttribute(normal, i).applyMatrix3(normalMatrix).normalize();
+      else n.set(0, 0, 1);
+      lines.push(`vn ${n.x.toFixed(6)} ${n.y.toFixed(6)} ${n.z.toFixed(6)}`);
+    }
+    const count = index ? index.count : position.count;
+    for (let i = 0; i < count; i += 3) {
+      const indices = [0, 1, 2].map((j) => offset + (index ? index.getX(i + j) : i + j) + 1);
+      lines.push(`f ${indices.map((v) => `${v}/${v}/${v}`).join(' ')}`);
+    }
+    offset += position.count;
+  });
+  return lines.join('\n') + '\n';
+}
+
+function serializeMtl(textureFile) {
+  const colors = {
+    chapa: [0.78, 0.8, 0.81],
+    estampa: [1, 1, 1],
+    aro: [0.79, 0.82, 0.82],
+    parafusos: [0.43, 0.46, 0.48]
+  };
+  const blocks = ['# PlacaLab 3D | materiais Wavefront'];
+  for (const [name, color] of Object.entries(colors)) {
+    blocks.push(`newmtl ${name}`, `Ka 0.100 0.100 0.100`, `Kd ${color.map((v) => v.toFixed(3)).join(' ')}`, 'Ks 0.100 0.100 0.100', 'Ns 25.000', 'illum 2');
+    if (name === 'estampa') blocks.push(`map_Kd ${textureFile}`);
+    blocks.push('');
+  }
+  for (const [name, texture] of modelTextureFiles) {
+    const mapLine = texture.repeats ? `map_Kd -clamp off ${texture.filename}` : `map_Kd ${texture.filename}`;
+    blocks.push(`newmtl ${name}`, 'Ka 1.000 1.000 1.000', 'Kd 1.000 1.000 1.000', 'Ks 0.150 0.150 0.150', 'Ns 80.000', 'illum 2', mapLine, '');
+  }
+  return blocks.join('\n');
+}
+
+function download(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
+function baseName() {
+  const label = codeInput.value.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'sem-texto';
+  return `placa_${label}`;
+}
+
+function base64Blob(base64, type = 'image/png') {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type });
+}
+
+async function exportPack() {
+  if (!validate()) return;
+  if (!window.JSZip) throw new Error('Não foi possível carregar o recurso de compactação. Verifique a conexão e recarregue a página.');
+  const name = baseName();
+  const pngName = `${name}.png`;
+  const mtlName = `${name}.mtl`;
+  const zip = new window.JSZip();
+  const png = await new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('Não foi possível gerar a textura PNG.')), 'image/png'));
+  zip.file(`${name}.obj`, serializeObj(true, pngName, mtlName));
+  zip.file(mtlName, serializeMtl(pngName));
+  zip.file(pngName, png);
+  for (const texture of modelTextureFiles.values()) zip.file(texture.filename, base64Blob(texture.base64));
+  const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+  download(blob, `${name}.zip`);
+}
+
+async function runExport(action, button) {
+  button.disabled = true;
+  try { await action(); }
+  catch (error) { window.alert(error.message || 'Não foi possível exportar a placa.'); }
+  finally { button.disabled = !valid; }
+}
+
+reloadBaseButton.addEventListener('click', async () => {
+  reloadBaseButton.disabled = true;
+  try {
+    await loadRootBase(true);
+    placeholder.hidden = true;
+    validate();
+  } catch (error) {
+    if (error.name !== 'AbortError') updateAssetStatus(error.message);
+  } finally {
+    reloadBaseButton.disabled = false;
+  }
+});
+
+form.addEventListener('change', validate);
+form.addEventListener('submit', (event) => event.preventDefault());
+codeInput.addEventListener('input', validate);
+$('#reset-view').addEventListener('click', resetView);
+objButton.addEventListener('click', () => runExport(() => {
+  if (!validate()) return;
+  download(new Blob([serializeObj(false)], { type: 'text/plain;charset=utf-8' }), `${baseName()}.obj`);
+}, objButton));
+packButton.addEventListener('click', () => runExport(exportPack, packButton));
+new ResizeObserver(resize).observe(viewport);
+resize();
+resetView();
+renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+
+try {
+  if (!window.opentype || !window.PLACALAB_FONTS) throw new Error('Arquivos da fonte indisponíveis.');
+  plateFonts.eng = decodeBase64Font(window.PLACALAB_FONTS.eng);
+  selectPlateFont();
+  initializeInterface();
+  try {
+    await loadRootBase();
+    placeholder.hidden = true;
+    validate();
+  } catch (error) {
+    updateAssetStatus(error.message);
+    placeholder.hidden = false;
+    placeholder.innerHTML = '<span>Selecione a pasta gerador-placa no painel ao lado para carregar a base.</span>';
+  }
+} catch (error) {
+  placeholder.hidden = false;
+  placeholder.innerHTML = '<span>Não foi possível carregar os arquivos do gerador.</span>';
+  console.error(error);
+}
+
+</script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand" aria-label="PlacaLab 3D">
+          <span class="brand-mark">PL</span>
+          <span class="brand-copy"><strong>PlacaLab</strong><small>Gerador de placas 3D</small></span>
+        </div>
+        <div class="topbar-right">Prévia e exportação para GTA</div>
+      </header>
+
+      <main class="workspace">
+        <aside class="sidebar">
+          <div class="sidebar-heading">
+            <h1>Gerar placa</h1>
+            <p>Digite o código, confira o resultado sobre sua base e exporte para o projeto.</p>
+          </div>
+
+          <form id="plate-form" novalidate>
+            <fieldset class="field-group">
+              <legend>Placa Mercosul</legend>
+              <label class="input-label" for="plate-code">Texto da placa</label>
+              <div class="input-wrap"><input id="plate-code" name="plate-code" type="text" value="ABC1D23" autocomplete="off" spellcheck="false" aria-describedby="code-hint" /><span class="input-suffix">7 caracteres</span></div>
+              <p id="code-hint" class="field-hint">Texto livre, sem formato obrigatório.</p>
+            </fieldset>
+
+            <fieldset class="field-group asset-group">
+              <legend>Modelagem 3D</legend>
+              <div class="font-fixed"><span>Fonte</span><strong>GL Nummernschild estreita</strong></div>
+              <p class="field-hint">O texto digitado vira uma geometria 3D com relevo e recebe o mesmo padrão repetido da base.</p>
+
+              <button class="file-button" type="button" id="reload-base">Selecionar pasta do projeto</button>
+              <p class="asset-help">Abra o index.html diretamente. Na primeira vez, selecione a pasta <code>gerador-placa</code>. Depois de exportar no Blender, clique acima para reler o placa.obj da mesma pasta.</p>
+              <p id="asset-status" class="asset-status" aria-live="polite"></p>
+            </fieldset>
+
+            <fieldset class="field-group export-group">
+              <legend>Exportar</legend>
+              <button type="button" id="download-pack" class="button button-primary" disabled><span class="button-icon">↓</span><span>Baixar modelo completo <small>OBJ, MTL e textura PNG</small></span></button>
+              <button type="button" id="download-obj" class="button button-secondary" disabled>Baixar somente o OBJ</button>
+              <p class="export-note">O arquivo OBJ separado contém apenas a geometria. Para manter as cores e inscrições, use o pacote completo.</p>
+            </fieldset>
+          </form>
+          <div class="sidebar-foot">Escala real <strong>400 × 130 mm</strong></div>
+        </aside>
+
+        <section class="preview-area" aria-label="Pré-visualização 3D">
+          <div class="preview-top">
+            <div><h2>Prévia 3D</h2><p>Arraste para girar e use a roda do mouse para aproximar.</p></div>
+            <span class="preview-badge" id="preview-model">Mercosul · Brasil</span>
+          </div>
+          <div id="viewport" class="viewport"><div class="viewport-grid"></div><div class="viewport-placeholder" id="viewport-placeholder"><span class="spinner"></span> Carregando a prévia 3D</div></div>
+          <div class="preview-bottom"><span>Arraste para girar</span><span>Scroll para zoom</span><button type="button" id="reset-view" aria-label="Redefinir posição da câmera">↺ <span>Redefinir vista</span></button></div>
+          <div class="details-bar"><div><small>Modelo</small><strong id="detail-model">Mercosul</strong></div><div><small>Dimensões</small><strong>400 × 130 mm</strong></div><div><small>Formato</small><strong>Wavefront OBJ</strong></div><div><small>Unidade</small><strong>Metros</strong></div></div>
+          <p class="disclaimer">Recurso visual para mods. Não gera placa oficial nem QR Code válido.</p>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

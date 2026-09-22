@@ -1,0 +1,44 @@
+PlacaLab 3D
+
+Abra index.html diretamente em uma versão atual do Chrome ou Edge.
+Na primeira abertura, clique em "Selecionar pasta do projeto" e escolha a
+pasta gerador-placa. O navegador guardará a referência dessa pasta.
+Digite qualquer texto e confira o resultado sobre a base 3D.
+Arraste a visualização para girar e use a roda do mouse para aproximar ou afastar.
+
+FONTE E TEXTO 3D
+O gerador usa a variante estreita da fonte GL Nummernschild.
+Cada código digitado é convertido em uma nova malha 3D com relevo. Portanto,
+não é necessário modelar e importar cada letra separadamente.
+As letras usam a textura padrão.png com a mesma escala e repetição do material
+correspondente na base placa.obj.
+
+BASE PLACA.OBJ
+O arquivo placa.obj da pasta raiz é obrigatório e é a única base utilizada.
+As texturas padrao.png e placa.png também são lidas da pasta raiz. Depois de
+exportar uma nova versão no Blender, clique em "Recarregar placa.obj da pasta".
+O gerador lê novamente o arquivo que está na raiz, sem usar uma cópia embutida.
+
+PUBLICAÇÃO NO GITHUB PAGES
+Mantenha index.html, styles.css, font-data.js, placa.obj, padrao.png e placa.png
+na raiz do site. Mantenha também a pasta fonts. No GitHub Pages, esses arquivos
+são carregados automaticamente e não é necessário selecionar uma pasta.
+Os nomes dos arquivos devem permanecer exatamente em letras minúsculas.
+
+Modele no plano XY, com a frente voltada para +Z. O gerador centraliza a malha,
+ajusta a largura e a altura para 0,40 x 0,13 m e posiciona o texto sobre o ponto
+mais alto da base. Para separar os materiais, nomeie-os no modelador como:
+  estampa ou frente: recebe a textura da placa
+  aro ou borda: recebe o material da borda
+  parafuso: recebe material metálico escuro
+  outros nomes: recebem o material da chapa
+
+"Baixar modelo completo" entrega um ZIP com OBJ, MTL e PNG. Mantenha esses
+três arquivos na mesma pasta ao importar no Blender ou em outra ferramenta.
+"Baixar somente .OBJ" entrega apenas a geometria, sem cores e textura.
+
+Dimensões do modelo: 0,40 x 0,13 m. Frente voltada para +Z.
+Este gerador é visual e não produz identificação veicular oficial.
+
+Fonte GL Nummernschild por Gutenberg Labo. Consulte os textos de licença na
+pasta fonts. A licença permite usar, copiar, modificar e distribuir a fonte.
