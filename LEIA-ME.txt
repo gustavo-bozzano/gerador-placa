@@ -6,6 +6,11 @@ pasta gerador-placa. O navegador guardará a referência dessa pasta.
 Digite qualquer texto e confira o resultado sobre a base 3D.
 Arraste a visualização para girar e use a roda do mouse para aproximar ou afastar.
 
+MODELOS
+O modelo Mercosul usa placa.obj. O modelo cinza usa placa_antigo.obj e permite
+editar livremente a identificação da placa, a cidade e a UF.
+No modelo cinza, os caracteres 3D podem usar Mandatory ou DIN 1451.
+
 FONTE E TEXTO 3D
 O gerador usa a variante estreita da fonte GL Nummernschild.
 Cada código digitado é convertido em uma nova malha 3D com relevo. Portanto,
@@ -24,6 +29,7 @@ PUBLICAÇÃO NO GITHUB PAGES
 Mantenha index.html, styles.css, font-data.js, placa.obj, placa.png e as três
 variações padrao*.png na raiz do site. No GitHub Pages, esses arquivos são
 carregados automaticamente e não é necessário selecionar uma pasta.
+Mantenha também placa_antigo.obj, placa_antigo.mtl e placa_antigo.png na raiz.
 Os nomes dos arquivos devem permanecer exatamente em letras minúsculas.
 
 Modele no plano XY, com a frente voltada para +Z. O gerador centraliza a malha,

@@ -29,8 +29,12 @@ const THICKNESS = 0.0012;
 const $ = (selector) => document.querySelector(selector);
 
 const form = $('#plate-form');
+const modelInput = $('#plate-model');
 const codeInput = $('#plate-code');
 const codeHint = $('#code-hint');
+const cityInput = $('#plate-city');
+const ufInput = $('#plate-uf');
+const oldFontInput = $('#old-font');
 const packButton = $('#download-pack');
 const objButton = $('#download-obj');
 const viewport = $('#viewport');
@@ -38,6 +42,11 @@ const placeholder = $('#viewport-placeholder');
 const assetStatus = $('#asset-status');
 const reloadBaseButton = $('#reload-base');
 const colorInput = $('#plate-color');
+const mercosulOptions = $('#mercosul-options');
+const oldPlateFields = $('#old-plate-fields');
+const oldPlateOptions = $('#old-plate-options');
+const previewModel = $('#preview-model');
+const detailModel = $('#detail-model');
 const localDebug = location.protocol === 'file:' || ['localhost', '127.0.0.1'].includes(location.hostname);
 
 const canvas = document.createElement('canvas');
@@ -78,6 +87,7 @@ const materials = {
   surface: new THREE.MeshBasicMaterial({ map: surfaceTexture, toneMapped: false }),
   rim: new THREE.MeshStandardMaterial({ color: 0xcdd1d2, metalness: 0.5, roughness: 0.42 }),
   ink: new THREE.MeshStandardMaterial({ color: 0x111820, metalness: 0.06, roughness: 0.78 }),
+  oldInk: new THREE.MeshBasicMaterial({ color: 0x090909, toneMapped: false }),
   screw: new THREE.MeshStandardMaterial({ color: 0x6d747b, metalness: 0.65, roughness: 0.35 })
 };
 
@@ -88,6 +98,7 @@ const customAssets = { base: null };
 const plateFonts = {};
 const modelTextureFiles = new Map();
 const modelBaseMaterials = new Map();
+const modelBaseExportNames = new Map();
 
 function roundedRect(width, height, radius) {
   const x = -width / 2;
@@ -180,7 +191,7 @@ function decodeBase64Font(base64) {
   return window.opentype.parse(bytes.buffer);
 }
 
-function makeThreeFont(openTypeFont) {
+function makeThreeFont(openTypeFont, isCCW = false) {
   return {
     generateShapes(text, size) {
       const path = openTypeFont.getPath(text, 0, 0, size);
@@ -194,13 +205,14 @@ function makeThreeFont(openTypeFont) {
         else if (command.type === 'Q') target.quadraticCurveTo(command.x1, -command.y1, x, y);
         else if (command.type === 'Z') target.currentPath?.closePath();
       }
-      return target.toShapes();
+      return target.toShapes(isCCW);
     }
   };
 }
 
 function selectPlateFont() {
-  font = makeThreeFont(plateFonts.eng);
+  const fontName = modelInput.value === 'antiga' ? oldFontInput.value : 'eng';
+  font = makeThreeFont(plateFonts[fontName], fontName === 'mandatory');
 }
 
 function patternUvProjection(parts) {
@@ -238,28 +250,43 @@ function applyPatternUV(geometry, scale, offsetX, offsetY) {
   geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
 }
 
-function createText(code, frontZ = THICKNESS) {
+function createTextMesh(code, frontZ, options = {}) {
+  if (!code.trim()) return;
   const geometry = new TextGeometry(code, {
     font,
     size: 0.08,
-    depth: 0.0015,
+    depth: options.depth || 0.0015,
     curveSegments: 5,
-    bevelEnabled: true,
+    bevelEnabled: options.bevelEnabled ?? true,
     bevelThickness: 0.00018,
     bevelSize: 0.00018,
     bevelSegments: 1
   });
   geometry.computeBoundingBox();
   const box = geometry.boundingBox;
-  const scale = Math.min(0.326 / (box.max.x - box.min.x), 0.071 / (box.max.y - box.min.y));
+  const width = box.max.x - box.min.x;
+  const height = box.max.y - box.min.y;
+  if (!width || !height) return;
+  const scale = Math.min((options.maxWidth || 0.326) / width, (options.maxHeight || 0.071) / height);
   geometry.translate(-(box.min.x + box.max.x) / 2, -(box.min.y + box.max.y) / 2, 0);
-  const offsetX = 0.008;
-  const offsetY = -0.012;
-  applyPatternUV(geometry, scale, offsetX, offsetY);
-  const patternMaterial = modelBaseMaterials.get('Material.001') || materials.ink;
-  const text = tag(new THREE.Mesh(geometry, patternMaterial), 'placa_padrao');
+  const offsetX = options.x || 0;
+  const offsetY = options.y || 0;
+  const usesPattern = options.materialName === 'placa_padrao';
+  if (usesPattern) applyPatternUV(geometry, scale, offsetX, offsetY);
+  const targetMaterial = usesPattern ? (modelBaseMaterials.get('Material.001') || materials.ink) : materials.oldInk;
+  const text = tag(new THREE.Mesh(geometry, targetMaterial), options.materialName || 'caracteres');
   text.scale.set(scale, scale, 1);
-  text.position.set(offsetX, offsetY, frontZ - 0.0028 );
+  text.position.set(offsetX, offsetY, frontZ + (options.zOffset ?? 0.00011));
+}
+
+function createText(code, frontZ = THICKNESS) {
+  if (modelInput.value === 'antiga') {
+    createTextMesh(code, frontZ, { x: 0, y: -0.019, maxWidth: 0.35, maxHeight: 0.068, zOffset: 0.0007, bevelEnabled: false, materialName: 'caracteres' });
+    createTextMesh(ufInput.value, frontZ, { x: -0.157, y: 0.031, maxWidth: 0.032, maxHeight: 0.016, depth: 0.0009, zOffset: 0.0007, bevelEnabled: false, materialName: 'caracteres' });
+    createTextMesh(cityInput.value, frontZ, { x: 0.025, y: 0.031, maxWidth: 0.235, maxHeight: 0.016, depth: 0.0009, zOffset: 0.0007, bevelEnabled: false, materialName: 'caracteres' });
+    return;
+  }
+  createTextMesh(code, frontZ, { x: 0.014, y: -0.018, maxWidth: 0.326, maxHeight: 0.071, materialName: 'placa_padrao' });
 }
 
 function geometryBounds(parts) {
@@ -316,12 +343,14 @@ function normalizeBase(parts) {
 function updateAssetStatus(message = '') {
   const loaded = Boolean(customAssets.base);
   const colorName = colorInput?.selectedOptions[0]?.textContent?.toLowerCase() || 'preto';
-  assetStatus.textContent = message || (loaded ? `placa.obj da pasta raiz em uso. Padrão ${colorName}.` : 'O arquivo placa.obj da pasta raiz não foi carregado.');
-  reloadBaseButton.textContent = loaded ? 'Recarregar placa.obj da pasta' : 'Selecionar pasta do projeto';
+  const isOld = modelInput.value === 'antiga';
+  const filename = isOld ? 'placa_antigo.obj' : 'placa.obj';
+  assetStatus.textContent = message || (loaded ? `${filename} da pasta raiz em uso.${isOld ? '' : ` Padrão ${colorName}.`}` : `O arquivo ${filename} da pasta raiz não foi carregado.`);
+  reloadBaseButton.textContent = loaded ? `Recarregar ${filename} da pasta` : 'Selecionar pasta do projeto';
 }
 
 function materialForBase(sourceName) {
-  if (modelBaseMaterials.has(sourceName)) return { material: modelBaseMaterials.get(sourceName), name: sourceName === 'Material.001' ? 'placa_padrao' : 'placa_textura' };
+  if (modelBaseMaterials.has(sourceName)) return { material: modelBaseMaterials.get(sourceName), name: modelBaseExportNames.get(sourceName) || 'chapa' };
   if (/estampa|front|face|frente/i.test(sourceName)) return { material: materials.surface, name: 'estampa' };
   if (/aro|rim|borda|border/.test(sourceName)) return { material: materials.rim, name: 'aro' };
   if (/parafuso|screw/.test(sourceName)) return { material: materials.screw, name: 'parafusos' };
@@ -395,63 +424,68 @@ async function selectProjectDirectory(requestAccess) {
 }
 
 async function rootFiles(requestAccess = false) {
+  const isOld = modelInput.value === 'antiga';
   const patternFilename = {
     preto: 'padrao.png',
     azul: 'padrao-azul.png',
     vermelho: 'padrao-vermelho.png'
   }[colorInput.value] || 'padrao.png';
+  const spec = isOld ? {
+    obj: 'placa_antigo.obj',
+    textures: [{ sourceName: 'None', sourceFile: 'placa_antigo.png', exportName: 'placa_antiga_textura', filename: 'placa_antiga_textura.png', repeats: false }]
+  } : {
+    obj: 'placa.obj',
+    textures: [
+      { sourceName: 'Material.001', sourceFile: patternFilename, exportName: 'placa_padrao', filename: `placa_padrao_${colorInput.value}.png`, repeats: true },
+      { sourceName: 'Material.002', sourceFile: 'placa.png', exportName: 'placa_textura', filename: 'placa_textura.png', repeats: false }
+    ]
+  };
   if (location.protocol !== 'file:') {
-    const [objResponse, patternResponse, plateResponse] = await Promise.all([
-      fetchFresh('./placa.obj'),
-      fetchFresh(`./${patternFilename}`),
-      fetchFresh('./placa.png')
+    const [objResponse, ...textureResponses] = await Promise.all([
+      fetchFresh(`./${spec.obj}`),
+      ...spec.textures.map((texture) => fetchFresh(`./${texture.sourceFile}`))
     ]);
-    return { objText: await objResponse.text(), patternBlob: await patternResponse.blob(), plateBlob: await plateResponse.blob() };
+    const textures = await Promise.all(spec.textures.map(async (texture, index) => ({ ...texture, blob: await textureResponses[index].blob() })));
+    return { objName: spec.obj, objText: await objResponse.text(), textures };
   }
   const directory = await selectProjectDirectory(requestAccess);
-  const [objHandle, patternHandle, plateHandle] = await Promise.all([
-    directory.getFileHandle('placa.obj'),
-    directory.getFileHandle(patternFilename),
-    directory.getFileHandle('placa.png')
+  const [objHandle, ...textureHandles] = await Promise.all([
+    directory.getFileHandle(spec.obj),
+    ...spec.textures.map((texture) => directory.getFileHandle(texture.sourceFile))
   ]);
-  const [objFile, patternBlob, plateBlob] = await Promise.all([
-    objHandle.getFile(),
-    patternHandle.getFile(),
-    plateHandle.getFile()
-  ]);
-  return { objText: await objFile.text(), patternBlob, plateBlob };
+  const [objFile, ...textureFiles] = await Promise.all([objHandle.getFile(), ...textureHandles.map((handle) => handle.getFile())]);
+  const textures = spec.textures.map((texture, index) => ({ ...texture, blob: textureFiles[index] }));
+  return { objName: spec.obj, objText: await objFile.text(), textures };
 }
 
 async function loadRootBase(requestAccess = false) {
-  updateAssetStatus('Lendo placa.obj da pasta raiz...');
+  const expectedName = modelInput.value === 'antiga' ? 'placa_antigo.obj' : 'placa.obj';
+  updateAssetStatus(`Lendo ${expectedName} da pasta raiz...`);
   const files = await rootFiles(requestAccess);
-  const [patternUrl, plateUrl] = await Promise.all([
-    blobAsDataUrl(files.patternBlob),
-    blobAsDataUrl(files.plateBlob)
-  ]);
+  const textureConfigs = await Promise.all(files.textures.map(async (texture) => ({ ...texture, dataUrl: await blobAsDataUrl(texture.blob) })));
   const object = objLoader.parse(files.objText);
   const parts = extractParts(object);
-  if (!parts.length) throw new Error('O placa.obj da pasta raiz não contém uma malha válida.');
+  if (!parts.length) throw new Error(`O ${files.objName} da pasta raiz não contém uma malha válida.`);
 
   const textureLoader = new THREE.TextureLoader();
-  const materialMap = {
-    'Material.001': { exportName: 'placa_padrao', filename: `placa_padrao_${colorInput.value}.png`, dataUrl: patternUrl },
-    'Material.002': { exportName: 'placa_textura', filename: 'placa_textura.png', dataUrl: plateUrl }
-  };
   for (const material of modelBaseMaterials.values()) material.dispose();
   modelBaseMaterials.clear();
+  modelBaseExportNames.clear();
   modelTextureFiles.clear();
-  for (const [sourceName, config] of Object.entries(materialMap)) {
+  for (const config of textureConfigs) {
     const texture = textureLoader.load(config.dataUrl);
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
-    const repeats = sourceName === 'Material.001';
-    if (repeats) {
+    if (config.repeats) {
       texture.wrapS = THREE.RepeatWrapping;
       texture.wrapT = THREE.RepeatWrapping;
     }
-    modelBaseMaterials.set(sourceName, new THREE.MeshStandardMaterial({ map: texture, roughness: 0.72, metalness: 0.04 }));
-    modelTextureFiles.set(config.exportName, { filename: config.filename, base64: config.dataUrl.split(',')[1], repeats });
+    const material = config.exportName === 'placa_antiga_textura'
+      ? new THREE.MeshBasicMaterial({ map: texture, toneMapped: false })
+      : new THREE.MeshStandardMaterial({ map: texture, roughness: 0.72, metalness: 0.04 });
+    modelBaseMaterials.set(config.sourceName, material);
+    modelBaseExportNames.set(config.sourceName, config.exportName);
+    modelTextureFiles.set(config.exportName, { filename: config.filename, base64: config.dataUrl.split(',')[1], repeats: config.repeats });
   }
   customAssets.base = normalizeBase(parts);
   updateAssetStatus();
@@ -460,9 +494,9 @@ async function loadRootBase(requestAccess = false) {
 function createModel(code) {
   clearModel();
   paintTexture();
-  if (!customAssets.base) throw new Error('O arquivo placa.obj é obrigatório.');
+  if (!customAssets.base) throw new Error('O arquivo da base é obrigatório.');
   const frontZ = addCustomBase(customAssets.base);
-  if (code.trim()) createText(code, frontZ);
+  createText(code, frontZ);
   updateAssetStatus();
 }
 
@@ -476,9 +510,19 @@ function validate() {
 }
 
 function initializeInterface() {
-  codeHint.textContent = 'Texto livre, sem formato obrigatório.';
   document.querySelectorAll('[data-local-debug]').forEach((element) => { element.hidden = !localDebug; });
+  updateModelInterface();
   validate();
+}
+
+function updateModelInterface() {
+  const isOld = modelInput.value === 'antiga';
+  oldPlateFields.hidden = !isOld;
+  oldPlateOptions.hidden = !isOld;
+  mercosulOptions.hidden = isOld;
+  codeHint.textContent = isOld ? 'Digite a identificação completa da placa antiga.' : 'Texto livre, sem formato obrigatório.';
+  previewModel.textContent = isOld ? 'Cinza antiga · Brasil' : 'Mercosul · Brasil';
+  detailModel.textContent = isOld ? 'Cinza antiga' : 'Mercosul';
 }
 
 function resetView() {
@@ -540,6 +584,7 @@ function serializeMtl(textureFile) {
     chapa: [0.78, 0.8, 0.81],
     estampa: [1, 1, 1],
     aro: [0.79, 0.82, 0.82],
+    caracteres: [0.035, 0.04, 0.045],
     parafusos: [0.43, 0.46, 0.48]
   };
   const blocks = ['# PlacaLab 3D | materiais Wavefront'];
@@ -568,7 +613,8 @@ function download(blob, filename) {
 
 function baseName() {
   const label = codeInput.value.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'sem-texto';
-  return `placa_${label}_${colorInput.value}`;
+  const variant = modelInput.value === 'antiga' ? `cinza_${oldFontInput.value}` : `mercosul_${colorInput.value}`;
+  return `placa_${variant}_${label}`;
 }
 
 function base64Blob(base64, type = 'image/png') {
@@ -617,6 +663,30 @@ reloadBaseButton.addEventListener('click', async () => {
 form.addEventListener('change', validate);
 form.addEventListener('submit', (event) => event.preventDefault());
 codeInput.addEventListener('input', validate);
+cityInput.addEventListener('input', validate);
+ufInput.addEventListener('input', validate);
+oldFontInput.addEventListener('change', () => {
+  selectPlateFont();
+  validate();
+});
+modelInput.addEventListener('change', async () => {
+  modelInput.disabled = true;
+  customAssets.base = null;
+  updateModelInterface();
+  selectPlateFont();
+  validate();
+  try {
+    await loadRootBase(location.protocol === 'file:');
+    placeholder.hidden = true;
+    validate();
+  } catch (error) {
+    placeholder.hidden = false;
+    placeholder.innerHTML = `<span>${error.message}</span>`;
+    updateAssetStatus(error.message);
+  } finally {
+    modelInput.disabled = false;
+  }
+});
 colorInput.addEventListener('change', async () => {
   colorInput.disabled = true;
   try {
@@ -643,6 +713,8 @@ renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, came
 try {
   if (!window.opentype || !window.PLACALAB_FONTS) throw new Error('Arquivos da fonte indisponíveis.');
   plateFonts.eng = decodeBase64Font(window.PLACALAB_FONTS.eng);
+  plateFonts.mandatory = decodeBase64Font(window.PLACALAB_FONTS.mandatory);
+  plateFonts.din1451 = decodeBase64Font(window.PLACALAB_FONTS.din1451);
   selectPlateFont();
   initializeInterface();
   try {
@@ -681,26 +753,50 @@ try {
 
           <form id="plate-form" novalidate>
             <fieldset class="field-group">
-              <legend>Placa Mercosul</legend>
+              <legend>Conteúdo da placa</legend>
+              <label class="input-label" for="plate-model">Modelo</label>
+              <select id="plate-model" name="plate-model">
+                <option value="mercosul" selected>Mercosul</option>
+                <option value="antiga">Cinza antiga</option>
+              </select>
+
               <label class="input-label" for="plate-code">Texto da placa</label>
               <div class="input-wrap"><input id="plate-code" name="plate-code" type="text" value="ABC1D23" autocomplete="off" spellcheck="false" aria-describedby="code-hint" /><span class="input-suffix">7 caracteres</span></div>
               <p id="code-hint" class="field-hint">Texto livre, sem formato obrigatório.</p>
+
+              <div id="old-plate-fields" class="conditional old-plate-fields" hidden>
+                <label class="input-label" for="plate-city">Cidade</label>
+                <input id="plate-city" name="plate-city" type="text" value="BLUMENAU" autocomplete="off" spellcheck="false" />
+                <label class="input-label" for="plate-uf">UF</label>
+                <input id="plate-uf" name="plate-uf" type="text" value="SC" autocomplete="off" spellcheck="false" />
+              </div>
             </fieldset>
 
             <fieldset class="field-group asset-group">
               <legend>Modelagem 3D</legend>
-              <div class="font-fixed"><span>Fonte</span><strong>GL Nummernschild estreita</strong></div>
-              <p class="field-hint">O texto digitado vira uma geometria 3D com relevo e recebe o mesmo padrão repetido da base.</p>
+              <div id="mercosul-options" class="conditional">
+                <div class="font-fixed"><span>Fonte</span><strong>GL Nummernschild estreita</strong></div>
+                <p class="field-hint">O texto digitado vira uma geometria 3D com relevo e recebe o mesmo padrão repetido da base.</p>
 
-              <label class="input-label" for="plate-color">Cor do padrão</label>
-              <select id="plate-color" name="plate-color">
-                <option value="preto" selected>Preto</option>
-                <option value="azul">Azul</option>
-                <option value="vermelho">Vermelho</option>
-              </select>
+                <label class="input-label" for="plate-color">Cor do padrão</label>
+                <select id="plate-color" name="plate-color">
+                  <option value="preto" selected>Preto</option>
+                  <option value="azul">Azul</option>
+                  <option value="vermelho">Vermelho</option>
+                </select>
+              </div>
+
+              <div id="old-plate-options" class="conditional" hidden>
+                <label class="input-label" for="old-font">Fonte dos caracteres</label>
+                <select id="old-font" name="old-font">
+                  <option value="mandatory" selected>Mandatory</option>
+                  <option value="din1451">DIN 1451</option>
+                </select>
+                <p class="field-hint">A placa, a cidade e a UF são geradas como texto 3D em relevo.</p>
+              </div>
 
               <button class="file-button local-debug" data-local-debug type="button" id="reload-base" hidden>Selecionar pasta do projeto</button>
-              <p class="asset-help local-debug" data-local-debug hidden>Recurso de depuração local. Selecione a pasta <code>gerador-placa</code> e use o botão para reler o placa.obj após exportá-lo no Blender.</p>
+              <p class="asset-help local-debug" data-local-debug hidden>Recurso de depuração local. Selecione a pasta <code>gerador-placa</code> e use o botão para reler a base escolhida após exportá-la no Blender.</p>
               <p id="asset-status" class="asset-status" aria-live="polite"></p>
             </fieldset>
 
