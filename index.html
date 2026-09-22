@@ -286,7 +286,7 @@ function createText(code, frontZ = THICKNESS) {
     createTextMesh(cityInput.value, frontZ, { x: 0.025, y: 0.031, maxWidth: 0.235, maxHeight: 0.016, depth: 0.0009, zOffset: 0.0007, bevelEnabled: false, materialName: 'caracteres' });
     return;
   }
-  createTextMesh(code, frontZ, { x: 0.014, y: -0.018, maxWidth: 0.326, maxHeight: 0.071, materialName: 'placa_padrao' });
+  createTextMesh(code, frontZ, { x: 0.008, y: -0.012, maxWidth: 0.326, maxHeight: 0.071, zOffset: -0.0028, materialName: 'placa_padrao' });
 }
 
 function geometryBounds(parts) {
