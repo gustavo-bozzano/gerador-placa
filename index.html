@@ -481,7 +481,7 @@ async function loadRootBase(requestAccess = false) {
       texture.wrapT = THREE.RepeatWrapping;
     }
     const material = config.exportName === 'placa_antiga_textura'
-      ? new THREE.MeshBasicMaterial({ map: texture, toneMapped: false })
+      ? new THREE.MeshBasicMaterial({ map: texture, toneMapped: false, side: THREE.DoubleSide })
       : new THREE.MeshStandardMaterial({ map: texture, roughness: 0.72, metalness: 0.04 });
     modelBaseMaterials.set(config.sourceName, material);
     modelBaseExportNames.set(config.sourceName, config.exportName);
