@@ -382,6 +382,28 @@ async function fetchFresh(path) {
   return response;
 }
 
+async function fillTransparentTexture(blob) {
+  const bitmap = await createImageBitmap(blob);
+  const textureCanvas = document.createElement('canvas');
+  textureCanvas.width = bitmap.width;
+  textureCanvas.height = bitmap.height;
+  const textureContext = textureCanvas.getContext('2d', { willReadFrequently: true });
+  textureContext.drawImage(bitmap, 0, 0);
+  const pixels = textureContext.getImageData(0, 0, bitmap.width, bitmap.height).data;
+  let fill = [177, 182, 188];
+  for (let index = 0; index < pixels.length; index += 4) {
+    if (pixels[index + 3] > 250) {
+      fill = [pixels[index], pixels[index + 1], pixels[index + 2]];
+      break;
+    }
+  }
+  textureContext.globalCompositeOperation = 'destination-over';
+  textureContext.fillStyle = `rgb(${fill.join(',')})`;
+  textureContext.fillRect(0, 0, bitmap.width, bitmap.height);
+  bitmap.close?.();
+  return new Promise((resolve) => textureCanvas.toBlob((result) => resolve(result || blob), 'image/png'));
+}
+
 function openHandleDatabase() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open('placalab-arquivos', 1);
@@ -432,7 +454,7 @@ async function rootFiles(requestAccess = false) {
   }[colorInput.value] || 'padrao.png';
   const spec = isOld ? {
     obj: 'placa_antigo.obj',
-    textures: [{ sourceName: 'None', sourceFile: 'placa_antigo.png', exportName: 'placa_antiga_textura', filename: 'placa_antiga_textura.png', repeats: false }]
+    textures: [{ sourceName: 'None', sourceFile: 'placa_antigo.png', exportName: 'placa_antiga_textura', filename: 'placa_antiga_textura.png', repeats: false, fillTransparency: true }]
   } : {
     obj: 'placa.obj',
     textures: [
@@ -462,7 +484,10 @@ async function loadRootBase(requestAccess = false) {
   const expectedName = modelInput.value === 'antiga' ? 'placa_antigo.obj' : 'placa.obj';
   updateAssetStatus(`Lendo ${expectedName} da pasta raiz...`);
   const files = await rootFiles(requestAccess);
-  const textureConfigs = await Promise.all(files.textures.map(async (texture) => ({ ...texture, dataUrl: await blobAsDataUrl(texture.blob) })));
+  const textureConfigs = await Promise.all(files.textures.map(async (texture) => {
+    const blob = texture.fillTransparency ? await fillTransparentTexture(texture.blob) : texture.blob;
+    return { ...texture, blob, dataUrl: await blobAsDataUrl(blob) };
+  }));
   const object = objLoader.parse(files.objText);
   const parts = extractParts(object);
   if (!parts.length) throw new Error(`O ${files.objName} da pasta raiz não contém uma malha válida.`);
