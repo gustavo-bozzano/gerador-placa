@@ -61,6 +61,8 @@ renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.7;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 viewport.append(renderer.domElement);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
@@ -69,11 +71,22 @@ controls.minDistance = 0.2;
 controls.maxDistance = 1.7;
 controls.enablePan = false;
 controls.target.set(0, 0, 0);
-scene.add(new THREE.AmbientLight(0xffffff, 2.0));
-const keyLight = new THREE.DirectionalLight(0xffffff, 2.2);
+scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+const keyLight = new THREE.DirectionalLight(0xffffff, 3.2);
 keyLight.position.set(-0.2, 0.35, 0.8);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.set(2048, 2048);
+keyLight.shadow.camera.left = -0.3;
+keyLight.shadow.camera.right = 0.3;
+keyLight.shadow.camera.top = 0.2;
+keyLight.shadow.camera.bottom = -0.2;
+keyLight.shadow.camera.near = 0.1;
+keyLight.shadow.camera.far = 1.5;
+keyLight.shadow.bias = -0.00002;
+keyLight.shadow.normalBias = 0.00008;
 scene.add(keyLight);
-const fillLight = new THREE.DirectionalLight(0x90b8ff, 0.9);
+scene.add(keyLight.target);
+const fillLight = new THREE.DirectionalLight(0x90b8ff, 0.45);
 fillLight.position.set(0.4, -0.2, 0.3);
 scene.add(fillLight);
 
@@ -124,6 +137,8 @@ function addHole(shape, x, y, radius) {
 
 function tag(mesh, materialName) {
   mesh.userData.exportMaterial = materialName;
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
   plateGroup.add(mesh);
   return mesh;
 }
@@ -506,7 +521,7 @@ async function loadRootBase(requestAccess = false) {
       texture.wrapT = THREE.RepeatWrapping;
     }
     const material = config.exportName === 'placa_antiga_textura'
-      ? new THREE.MeshBasicMaterial({ map: texture, toneMapped: false, side: THREE.DoubleSide })
+      ? new THREE.MeshStandardMaterial({ map: texture, roughness: 0.72, metalness: 0.04, side: THREE.DoubleSide })
       : new THREE.MeshStandardMaterial({ map: texture, roughness: 0.72, metalness: 0.04 });
     modelBaseMaterials.set(config.sourceName, material);
     modelBaseExportNames.set(config.sourceName, config.exportName);
