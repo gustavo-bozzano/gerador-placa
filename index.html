@@ -296,9 +296,9 @@ function createTextMesh(code, frontZ, options = {}) {
 
 function createText(code, frontZ = THICKNESS) {
   if (modelInput.value === 'antiga') {
-    createTextMesh(code, frontZ, { x: 0, y: -0.019, maxWidth: 0.35, maxHeight: 0.068, zOffset: 0.0007, bevelEnabled: false, materialName: 'caracteres' });
-    createTextMesh(ufInput.value, frontZ, { x: -0.157, y: 0.031, maxWidth: 0.032, maxHeight: 0.016, depth: 0.0009, zOffset: 0.0007, bevelEnabled: false, materialName: 'caracteres' });
-    createTextMesh(cityInput.value, frontZ, { x: 0.025, y: 0.031, maxWidth: 0.235, maxHeight: 0.016, depth: 0.0009, zOffset: 0.0007, bevelEnabled: false, materialName: 'caracteres' });
+    createTextMesh(code, frontZ, { x: 0, y: -0.019, maxWidth: 0.35, maxHeight: 0.068, zOffset: -0.0028, bevelEnabled: false, materialName: 'caracteres' });
+    createTextMesh(ufInput.value, frontZ, { x: -0.14, y: 0.031, maxWidth: 0.032, maxHeight: 0.016, depth: 0.0009, zOffset: -0.0014, bevelEnabled: false, materialName: 'caracteres' });
+    createTextMesh(cityInput.value, frontZ, { x: 0.025, y: 0.031, maxWidth: 0.235, maxHeight: 0.016, depth: 0.0009, zOffset: -0.0014, bevelEnabled: false, materialName: 'caracteres' });
     return;
   }
   createTextMesh(code, frontZ, { x: 0.008, y: -0.012, maxWidth: 0.326, maxHeight: 0.071, zOffset: -0.0028, materialName: 'placa_padrao' });
