@@ -42,6 +42,7 @@ const placeholder = $('#viewport-placeholder');
 const assetStatus = $('#asset-status');
 const reloadBaseButton = $('#reload-base');
 const colorInput = $('#plate-color');
+const finishInput = $('#plate-finish');
 const mercosulOptions = $('#mercosul-options');
 const oldPlateFields = $('#old-plate-fields');
 const oldPlateOptions = $('#old-plate-options');
@@ -358,9 +359,10 @@ function normalizeBase(parts) {
 function updateAssetStatus(message = '') {
   const loaded = Boolean(customAssets.base);
   const colorName = colorInput?.selectedOptions[0]?.textContent?.toLowerCase() || 'preto';
+  const finishName = finishInput?.value === 'solida' ? 'Cor sólida' : 'Padrão repetido';
   const isOld = modelInput.value === 'antiga';
   const filename = isOld ? 'placa_antigo.obj' : 'placa.obj';
-  assetStatus.textContent = message || (loaded ? `${filename} da pasta raiz em uso.${isOld ? '' : ` Padrão ${colorName}.`}` : `O arquivo ${filename} da pasta raiz não foi carregado.`);
+  assetStatus.textContent = message || (loaded ? `${filename} da pasta raiz em uso.${isOld ? '' : ` ${finishName}, cor ${colorName}.`}` : `O arquivo ${filename} da pasta raiz não foi carregado.`);
   reloadBaseButton.textContent = loaded ? `Recarregar ${filename} da pasta` : 'Selecionar pasta do projeto';
 }
 
@@ -462,18 +464,25 @@ async function selectProjectDirectory(requestAccess) {
 
 async function rootFiles(requestAccess = false) {
   const isOld = modelInput.value === 'antiga';
+  const usesSolidColor = finishInput.value === 'solida';
   const patternFilename = {
     preto: 'padrao.png',
     azul: 'padrao-azul.png',
     vermelho: 'padrao-vermelho.png'
   }[colorInput.value] || 'padrao.png';
+  const solidFilename = {
+    preto: 'preto.png',
+    azul: 'azul.png',
+    vermelho: 'vermelho.png'
+  }[colorInput.value] || 'preto.png';
+  const mercosulTextureFilename = usesSolidColor ? solidFilename : patternFilename;
   const spec = isOld ? {
     obj: 'placa_antigo.obj',
     textures: [{ sourceName: 'None', sourceFile: 'placa_antigo.png', exportName: 'placa_antiga_textura', filename: 'placa_antiga_textura.png', repeats: false, fillTransparency: true }]
   } : {
     obj: 'placa.obj',
     textures: [
-      { sourceName: 'Material.001', sourceFile: patternFilename, exportName: 'placa_padrao', filename: `placa_padrao_${colorInput.value}.png`, repeats: true },
+      { sourceName: 'Material.001', sourceFile: mercosulTextureFilename, exportName: 'placa_padrao', filename: `placa_${usesSolidColor ? 'solida' : 'padrao'}_${colorInput.value}.png`, repeats: true },
       { sourceName: 'Material.002', sourceFile: 'placa.png', exportName: 'placa_textura', filename: 'placa_textura.png', repeats: false }
     ]
   };
@@ -653,7 +662,7 @@ function download(blob, filename) {
 
 function baseName() {
   const label = codeInput.value.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'sem-texto';
-  const variant = modelInput.value === 'antiga' ? `cinza_${oldFontInput.value}` : `mercosul_${colorInput.value}`;
+  const variant = modelInput.value === 'antiga' ? `cinza_${oldFontInput.value}` : `mercosul_${finishInput.value}_${colorInput.value}`;
   return `placa_${variant}_${label}`;
 }
 
@@ -727,8 +736,9 @@ modelInput.addEventListener('change', async () => {
     modelInput.disabled = false;
   }
 });
-colorInput.addEventListener('change', async () => {
+async function reloadMercosulTexture() {
   colorInput.disabled = true;
+  finishInput.disabled = true;
   try {
     await loadRootBase(location.protocol === 'file:');
     placeholder.hidden = true;
@@ -737,8 +747,11 @@ colorInput.addEventListener('change', async () => {
     if (error.name !== 'AbortError') updateAssetStatus(error.message);
   } finally {
     colorInput.disabled = false;
+    finishInput.disabled = false;
   }
-});
+}
+colorInput.addEventListener('change', reloadMercosulTexture);
+finishInput.addEventListener('change', reloadMercosulTexture);
 $('#reset-view').addEventListener('click', resetView);
 objButton.addEventListener('click', () => runExport(() => {
   if (!validate()) return;
@@ -816,9 +829,15 @@ try {
               <legend>Modelagem 3D</legend>
               <div id="mercosul-options" class="conditional">
                 <div class="font-fixed"><span>Fonte</span><strong>GL Nummernschild estreita</strong></div>
-                <p class="field-hint">O texto digitado vira uma geometria 3D com relevo e recebe o mesmo padrão repetido da base.</p>
+                <p class="field-hint">O texto digitado vira uma geometria 3D com relevo e recebe a textura escolhida.</p>
 
-                <label class="input-label" for="plate-color">Cor do padrão</label>
+                <label class="input-label" for="plate-finish">Acabamento da textura</label>
+                <select id="plate-finish" name="plate-finish">
+                  <option value="padrao" selected>Padrão repetido</option>
+                  <option value="solida">Cor sólida</option>
+                </select>
+
+                <label class="input-label" for="plate-color">Cor da textura</label>
                 <select id="plate-color" name="plate-color">
                   <option value="preto" selected>Preto</option>
                   <option value="azul">Azul</option>

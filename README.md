@@ -21,7 +21,7 @@ Crie a identificação da placa, confira o resultado em uma prévia 3D interativ
 - Prévia 3D com rotação e zoom.
 - Caracteres gerados dinamicamente como geometria 3D.
 - Fontes **GL Nummernschild**, **Mandatory** e **DIN 1451**, conforme o modelo escolhido.
-- Padrão das letras Mercosul nas cores preta, azul e vermelha.
+- Textura com padrão repetido ou cor sólida nas cores preta, azul e vermelha.
 - Cidade e UF personalizáveis na placa antiga.
 - Base carregada diretamente de `placa.obj` ou `placa_antigo.obj`.
 - Exportação somente em `.obj` ou pacote completo com `.obj`, `.mtl` e texturas `.png`.
@@ -57,7 +57,7 @@ As bases ficam na raiz do projeto:
 
 | Modelo | Malha | Material | Textura |
 | --- | --- | --- | --- |
-| Mercosul | `placa.obj` | `placa.mtl` | `placa.png` e `padrao*.png` |
+| Mercosul | `placa.obj` | `placa.mtl` | `placa.png`, `padrao*.png`, `preto.png`, `azul.png` e `vermelho.png` |
 | Cinza antiga | `placa_antigo.obj` | `placa_antigo.mtl` | `placa_antigo.png` |
 
 Ao substituir uma base, mantenha o nome do arquivo e exporte o mapa UV junto com o OBJ. O site busca a versão mais recente dos arquivos a cada carregamento.

@@ -15,20 +15,21 @@ FONTE E TEXTO 3D
 O gerador usa a variante estreita da fonte GL Nummernschild.
 Cada código digitado é convertido em uma nova malha 3D com relevo. Portanto,
 não é necessário modelar e importar cada letra separadamente.
-As letras usam a textura padrão.png com a mesma escala e repetição do material
-correspondente na base placa.obj.
+As letras podem usar a textura com padrão repetido ou uma textura de cor sólida,
+sempre com o mesmo material correspondente na base placa.obj.
 
 BASE PLACA.OBJ
 O arquivo placa.obj da pasta raiz é obrigatório e é a única base utilizada.
 As opções de padrão usam padrao.png para preto, padrao-azul.png para azul e
-padrao-vermelho.png para vermelho. A textura placa.png também fica na raiz.
+padrao-vermelho.png para vermelho. As opções sólidas usam preto.png, azul.png e
+vermelho.png. A textura placa.png também fica na raiz.
 O botão para recarregar placa.obj aparece somente ao abrir localmente ou em
 localhost, pois é um recurso de depuração.
 
 PUBLICAÇÃO NO GITHUB PAGES
-Mantenha index.html, styles.css, font-data.js, placa.obj, placa.png e as três
-variações padrao*.png na raiz do site. No GitHub Pages, esses arquivos são
-carregados automaticamente e não é necessário selecionar uma pasta.
+Mantenha index.html, styles.css, font-data.js, placa.obj, placa.png, as três
+variações padrao*.png e as texturas sólidas preto.png, azul.png e vermelho.png
+na raiz do site. No GitHub Pages, esses arquivos são carregados automaticamente.
 Mantenha também placa_antigo.obj, placa_antigo.mtl e placa_antigo.png na raiz.
 Os nomes dos arquivos devem permanecer exatamente em letras minúsculas.
 
